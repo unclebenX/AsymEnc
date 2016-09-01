@@ -70,23 +70,25 @@ class Server:
             sys.exit()
         sendMatrix(clientSocket, self.symMatrixA)
         sendMatrix(clientSocket, self.symMatrixB)
-        print("Secure channel ready. Receiving message...")
-        messageSize = int(clientSocket.recv(10).decode())
-        keyArray = []
-        for i in range(messageSize):
-            Y = genRandomVector(self.size)
-            MAY = np.dot(self.symMatrixA,Y)
-            MBY = np.dot(self.symMatrixB,Y)
-            recvVector = recvMatrix(clientSocket)
-            l = np.split(recvVector, 2)
-            MAX = l[0]
-            MBX = l[1]
-            sendMatrix(clientSocket, np.concatenate((MAY, MBY), axis=0))
-            key = np.dot(np.transpose(Y),MAX)[0,0]+np.dot(np.transpose(Y),MBX)[0,0]
-            keyArray.append(key)
-        message = vernamDecrypt(clientSocket.recv(messageSize + 10).decode(), keyArray)
-        print "Decrypted message: "
-        print message
+        print("Secure channel ready. Waiting for messages...")
+        message = ""
+        while message.lower() != "close":
+            messageSize = int(clientSocket.recv(10).decode())
+            keyArray = []
+            for i in range(messageSize):
+                Y = genRandomVector(self.size)
+                MAY = np.dot(self.symMatrixA,Y)
+                MBY = np.dot(self.symMatrixB,Y)
+                recvVector = recvMatrix(clientSocket)
+                l = np.split(recvVector, 2)
+                MAX = l[0]
+                MBX = l[1]
+                sendMatrix(clientSocket, np.concatenate((MAY, MBY), axis=0))
+                key = np.dot(np.transpose(Y),MAX)[0,0]+np.dot(np.transpose(Y),MBX)[0,0]
+                keyArray.append(key)
+            message = vernamDecrypt(clientSocket.recv(messageSize + 10).decode(), keyArray)
+            print "Decrypted message: "
+            print message
         self.socket.close()
         return
 
@@ -94,6 +96,8 @@ class Client:
     socket = None
     host = None
     port = None
+    MA = None
+    MB = None
     OPEN_CHANNEL = "OPEN"
     CLOSE_CHANNEL = "CLOSE"
 
@@ -104,26 +108,33 @@ class Client:
         self.CLOSE_CHANNEL.encode()
         return
 
-    def run(self, message):
+    def run(self):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.host, self.port))
         except IOError:
             print("\n\n\a\tNetwork error encountered. Encrypted channel closed.")
             sys.exit()
-        print("Connected to ", self.host)
+        print "Connected to ", self.host
         self.socket.send(self.OPEN_CHANNEL)
-        MA = recvMatrix(self.socket)
-        MB = recvMatrix(self.socket)
-        print("Secure channel ready. Sending message...")
+        self.MA = recvMatrix(self.socket)
+        self.MB = recvMatrix(self.socket)
+        print("Secure channel ready.")
+        message = ""
+        while message.lower()!="close":
+            message = raw_input("> ")
+            self.send(message)
+        self.socket.close()
+
+    def send(self, message):
         l = str(len(message))
         self.socket.send(l.encode())
-        size = len(MA[0])
+        size = len(self.MA[0])
         keyArray = []
         for i in range(len(message)):
             X = genRandomVector(size)
-            MAX = np.dot(MA,X)
-            MBX = np.dot(MB,X)
+            MAX = np.dot(self.MA,X)
+            MBX = np.dot(self.MB,X)
             sendMatrix(self.socket, np.concatenate((MAX,MBX), axis=0))
             recvVector = recvMatrix(self.socket)
             l = np.split(recvVector, 2)
@@ -135,5 +146,3 @@ class Client:
         print encryptedMessage
         self.socket.send(encryptedMessage.encode())
         print "Message sent."
-        print "Closing channel now."
-        self.socket.close()

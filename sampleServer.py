@@ -2,5 +2,5 @@
 
 from Core import Server
 
-a = Server(9888, 15)
+a = Server(9888, 100)
 a.run()
